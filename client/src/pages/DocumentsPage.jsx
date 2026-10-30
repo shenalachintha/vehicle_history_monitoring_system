@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import {
@@ -12,6 +12,8 @@ import {
   Filter,
   Pencil,
   Trash2,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -22,9 +24,12 @@ export const DocumentsPage = () => {
   const [searchParams] = useSearchParams();
 
   const [showAddModal, setShowAddModal] = useState(searchParams.get('action') === 'upload');
+  const [searchQuery, setSearchQuery] = useState('');
   const [docTypeFilter, setDocTypeFilter] = useState('');
   const [vehicleCategoryFilter, setVehicleCategoryFilter] = useState('');
   const [expiryFilter, setExpiryFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(9);
   const [formVehicleCategory, setFormVehicleCategory] = useState('');
   const [editingDocument, setEditingDocument] = useState(null);
   const [formData, setFormData] = useState({
@@ -58,7 +63,11 @@ export const DocumentsPage = () => {
     mutationFn: ({ id, data }) => id ? api.put(`/documents/${id}`, data) : api.post('/documents', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['documents'] });
+      queryClient.invalidateQueries({ queryKey: ['alerts'] });
+      queryClient.invalidateQueries({ queryKey: ['navbar-alerts'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['vehicle'] });
+      queryClient.invalidateQueries({ queryKey: ['vehicles'] });
       setShowAddModal(false);
       setEditingDocument(null);
       setFormData({
@@ -86,7 +95,10 @@ export const DocumentsPage = () => {
       });
       queryClient.invalidateQueries({ queryKey: ['documents'] });
       queryClient.invalidateQueries({ queryKey: ['alerts'] });
+      queryClient.invalidateQueries({ queryKey: ['navbar-alerts'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['vehicle'] });
+      queryClient.invalidateQueries({ queryKey: ['vehicles'] });
     },
   });
 
@@ -118,21 +130,45 @@ export const DocumentsPage = () => {
       ? Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
       : null;
 
-    if (expiryFilter === 'expired') return diffDays !== null && diffDays < 0;
+    if (expiryFilter === 'expired' && (diffDays === null || diffDays >= 0)) return false;
     if (expiryFilter === 'expiring') {
       const warningDaysBefore = Number.isFinite(Number(doc.warningDaysBefore))
         ? Number(doc.warningDaysBefore)
         : 30;
-      return diffDays !== null && diffDays >= 0 && diffDays <= warningDaysBefore;
+      if (diffDays === null || diffDays < 0 || diffDays > warningDaysBefore) return false;
     }
     if (expiryFilter === 'valid') {
       const warningDaysBefore = Number.isFinite(Number(doc.warningDaysBefore))
         ? Number(doc.warningDaysBefore)
         : 30;
-      return diffDays === null || diffDays > warningDaysBefore;
+      if (diffDays !== null && diffDays <= warningDaysBefore) return false;
     }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      const matches =
+        doc.title?.toLowerCase().includes(q) ||
+        doc.documentNumber?.toLowerCase().includes(q) ||
+        doc.vehicle?.registrationNo?.toLowerCase().includes(q) ||
+        doc.vehicle?.make?.toLowerCase().includes(q) ||
+        doc.vehicle?.model?.toLowerCase().includes(q);
+      if (!matches) return false;
+    }
+
     return true;
   });
+
+  // Reset to first page when any filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, docTypeFilter, vehicleCategoryFilter, expiryFilter, pageSize]);
+
+  const totalItems = filteredDocuments.length;
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
+  const paginatedDocuments = filteredDocuments.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
 
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto pb-10">
@@ -157,12 +193,27 @@ export const DocumentsPage = () => {
         )}
       </div>
 
-      <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-xs">
-        <div className="flex items-center gap-2 mb-3">
-          <Filter className="w-4 h-4 text-blue-600" />
-          <span className="text-xs font-extrabold text-slate-800">Filter registered documents</span>
+      <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-xs space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-blue-600" />
+            <span className="text-xs font-extrabold text-slate-800">Filter registered documents</span>
+          </div>
+          <span className="text-xs font-bold text-slate-500">
+            Showing <strong className="text-slate-900">{filteredDocuments.length}</strong> documents
+          </span>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search title, doc no, vehicle..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+            />
+          </div>
           <select
             value={docTypeFilter}
             onChange={(e) => setDocTypeFilter(e.target.value)}
@@ -200,7 +251,7 @@ export const DocumentsPage = () => {
             className="px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
           >
             <option value="">All expiry statuses</option>
-            <option value="expiring">Expiring within each document's threshold</option>
+            <option value="expiring">Expiring within threshold</option>
             <option value="expired">Expired</option>
             <option value="valid">Valid</option>
           </select>
@@ -209,7 +260,7 @@ export const DocumentsPage = () => {
 
       {/* Documents Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {filteredDocuments.map((doc) => {
+        {paginatedDocuments.map((doc) => {
           const expiry = doc.expiryDate ? new Date(doc.expiryDate) : null;
           const diffDays = expiry
             ? Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
@@ -306,6 +357,59 @@ export const DocumentsPage = () => {
           </div>
         )}
       </div>
+
+      {/* Pagination Bar */}
+      {totalItems > 0 && (
+        <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-3">
+            <span className="text-slate-500">
+              Showing{' '}
+              <strong className="text-slate-800">
+                {Math.min((currentPage - 1) * pageSize + 1, totalItems)}
+              </strong>{' '}
+              to{' '}
+              <strong className="text-slate-800">
+                {Math.min(currentPage * pageSize, totalItems)}
+              </strong>{' '}
+              of <strong className="text-slate-800">{totalItems}</strong> documents
+            </span>
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none"
+            >
+              <option value={6}>6 per page</option>
+              <option value={9}>9 per page</option>
+              <option value={15}>15 per page</option>
+              <option value={30}>30 per page</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Previous Page"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+
+            <span className="px-3 py-1 font-bold text-slate-700 text-xs">
+              Page {currentPage} of {totalPages}
+            </span>
+
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Next Page"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Add Document Modal */}
       {showAddModal && (

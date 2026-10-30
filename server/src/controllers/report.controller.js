@@ -112,7 +112,7 @@ export class ReportController {
       });
 
       // 6. Recent Activity Feed
-      const [recentEvents, recentAlerts] = await Promise.all([
+      const [recentEvents, recentAlerts, urgentAlerts, expiringDocuments] = await Promise.all([
         prisma.vehicleEvent.findMany({
           take: 5,
           orderBy: { createdAt: 'desc' },
@@ -125,6 +125,29 @@ export class ReportController {
           orderBy: { createdAt: 'desc' },
           include: {
             vehicle: { select: { registrationNo: true } },
+          },
+        }),
+        prisma.alert.findMany({
+          where: { status: { in: ['OPEN', 'ACKNOWLEDGED'] } },
+          orderBy: [
+            { severity: 'asc' },
+            { createdAt: 'desc' },
+          ],
+          take: 6,
+          include: {
+            vehicle: { select: { id: true, registrationNo: true, make: true, model: true } },
+          },
+        }),
+        prisma.vehicleDocument.findMany({
+          where: {
+            expiryDate: {
+              lte: new Date(now.getTime() + 45 * 24 * 60 * 60 * 1000),
+            },
+          },
+          orderBy: { expiryDate: 'asc' },
+          take: 6,
+          include: {
+            vehicle: { select: { id: true, registrationNo: true, make: true, model: true } },
           },
         }),
       ]);
@@ -163,6 +186,8 @@ export class ReportController {
           liveVehicles,
           recentVehicles,
           recentActivities: activities,
+          urgentWatchlist: urgentAlerts,
+          expiringDocuments,
         },
       });
     } catch (error) {

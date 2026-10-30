@@ -1,0 +1,15 @@
+{
+  "companyName": "El-Toro Roofing Products Ltd.",
+  "timezone": "Asia/Colombo (GMT+05:30)",
+  "currency": "LKR",
+  "distanceUnit": "km",
+  "warningDays": 30,
+  "warningKm": 500,
+  "criticalDays": 15,
+  "criticalKm": 200,
+  "anomalyDistanceLimit": 3000,
+  "weeklyAuditDay": "Monday",
+  "emailNotifications": true,
+  "updatedAt": "2026-10-30T08:22:59.737Z",
+  "documentWarningDays": 30
+}

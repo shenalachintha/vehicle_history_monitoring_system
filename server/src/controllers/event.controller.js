@@ -28,7 +28,7 @@ export const eventCreateSchema = z.object({
     ]),
     title: z.string().min(2),
     eventDate: z.string().optional(),
-    odometerAtEvent: z.number().min(0),
+    odometerAtEvent: z.union([z.number(), z.string()]).optional().nullable(),
     issueDescription: z.string().optional(),
     workPerformed: z.string().min(2),
     serviceProvider: z.string().min(1),
@@ -156,6 +156,17 @@ export class EventController {
         items = [],
       } = req.body;
 
+      // Fetch vehicle to validate and get fallback odometer if omitted
+      const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
+      if (!vehicle) {
+        return res.status(404).json({ success: false, message: 'Vehicle not found.' });
+      }
+
+      // If odometerAtEvent was omitted or blank, fallback to vehicle's current odometer
+      const finalOdometer = (odometerAtEvent !== undefined && odometerAtEvent !== null && odometerAtEvent !== '')
+        ? Number(odometerAtEvent)
+        : Number(vehicle.currentOdometer || 0);
+
       // Calculate total item parts cost if provided
       let computedPartsCost = partsCost;
       if (items.length > 0) {
@@ -171,7 +182,7 @@ export class EventController {
           eventType,
           title,
           eventDate: eventDateObj,
-          odometerAtEvent,
+          odometerAtEvent: finalOdometer,
           issueDescription,
           workPerformed,
           serviceProvider,
@@ -183,7 +194,7 @@ export class EventController {
           currency,
           recommendations,
           nextServiceDate: nextServiceDate ? new Date(nextServiceDate) : null,
-          nextServiceMileage,
+          nextServiceMileage: nextServiceMileage ? Number(nextServiceMileage) : null,
           createdById: req.user.id,
           items: {
             create: items.map(item => ({
@@ -200,25 +211,91 @@ export class EventController {
         include: { items: true },
       });
 
-      // Update vehicle current odometer if event is higher
-      const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
-      if (vehicle && Number(odometerAtEvent) > Number(vehicle.currentOdometer)) {
+      // Update vehicle current odometer if event odometer is higher
+      if (finalOdometer > Number(vehicle.currentOdometer)) {
         await prisma.vehicle.update({
           where: { id: vehicleId },
           data: {
-            currentOdometer: odometerAtEvent,
+            currentOdometer: finalOdometer,
             odometerLastUpdated: eventDateObj,
           },
         });
       }
 
-      // If a specific rule was completed, update it
+      // Determine which rule(s) this service event satisfies
+      let targetRuleIds = [];
       if (ruleIdToComplete) {
-        await MaintenanceService.completeRuleMaintenance(
-          ruleIdToComplete,
-          eventDateObj,
-          odometerAtEvent
-        );
+        targetRuleIds.push(ruleIdToComplete);
+      } else {
+        // Auto-detect applicable active rules for this vehicle
+        const applicableRules = await prisma.maintenanceRule.findMany({
+          where: {
+            isActive: true,
+            OR: [
+              { vehicleId },
+              { vehicleId: null, vehicleCategory: null },
+              { vehicleId: null, vehicleCategory: vehicle.category },
+            ],
+          },
+        });
+
+        // Find open alerts for this vehicle to resolve
+        const openAlerts = await prisma.alert.findMany({
+          where: {
+            vehicleId,
+            status: { in: ['OPEN', 'ACKNOWLEDGED'] },
+            ruleId: { not: null },
+          },
+        });
+        const openRuleIds = new Set(openAlerts.map(a => a.ruleId));
+
+        for (const rule of applicableRules) {
+          const ruleNameLower = (rule.name || '').toLowerCase();
+          const titleLower = (title || '').toLowerCase();
+          const workLower = (workPerformed || '').toLowerCase();
+
+          const nameMatches = titleLower.includes(ruleNameLower) || ruleNameLower.includes(titleLower) ||
+            workLower.includes(ruleNameLower) ||
+            (titleLower.includes('oil') && ruleNameLower.includes('oil')) ||
+            (titleLower.includes('service') && ruleNameLower.includes('service')) ||
+            (titleLower.includes('brake') && ruleNameLower.includes('brake')) ||
+            (titleLower.includes('tyre') && ruleNameLower.includes('tyre'));
+
+          if (openRuleIds.has(rule.id) || nameMatches) {
+            targetRuleIds.push(rule.id);
+          }
+        }
+
+        // If still no rule matched, and it's a routine service and vehicle has exactly 1 rule, complete it
+        if (targetRuleIds.length === 0 && eventType === 'ROUTINE_SERVICE' && applicableRules.length === 1) {
+          targetRuleIds.push(applicableRules[0].id);
+        }
+      }
+
+      // Complete all identified rules and auto-resolve associated alerts
+      for (const rId of targetRuleIds) {
+        try {
+          await MaintenanceService.completeRuleMaintenance(
+            rId,
+            eventDateObj,
+            finalOdometer
+          );
+
+          await prisma.alert.updateMany({
+            where: {
+              vehicleId,
+              ruleId: rId,
+              status: { in: ['OPEN', 'ACKNOWLEDGED'] },
+            },
+            data: {
+              status: 'RESOLVED',
+              resolutionNotes: `Auto-resolved: Service event logged (${title} at ${finalOdometer.toLocaleString()} km).`,
+              resolvedAt: eventDateObj,
+            },
+          });
+        } catch (e) {
+          console.error(`[MAINTENANCE RULE COMPLETE ERROR] Rule ID ${rId}:`, e);
+        }
       }
 
       // Create Audit Log
@@ -232,14 +309,16 @@ export class EventController {
         },
       });
 
-      // Re-evaluate alerts for the vehicle
-      AlertService.evaluateFleetAlerts(vehicleId).catch(err => {
+      // Synchronously re-evaluate fleet alerts for this vehicle so alerts and profile warnings are immediately cleared
+      try {
+        await AlertService.evaluateFleetAlerts(vehicleId);
+      } catch (err) {
         console.error('[ALERT EVAL ERROR]', err);
-      });
+      }
 
       res.status(201).json({
         success: true,
-        message: 'Vehicle event logged successfully.',
+        message: 'Vehicle event logged successfully and maintenance alerts cleared.',
         data: newEvent,
       });
     } catch (error) {

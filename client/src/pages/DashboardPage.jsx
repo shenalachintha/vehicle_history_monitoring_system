@@ -4,15 +4,17 @@ import { Car, Wrench, AlertTriangle, Calendar } from 'lucide-react';
 import { MetricCard } from '../components/dashboard/MetricCard';
 import { StatusDonutChart } from '../components/dashboard/StatusDonutChart';
 import { MaintenanceTrendsChart } from '../components/dashboard/MaintenanceTrendsChart';
-import { FleetMapWidget } from '../components/dashboard/FleetMapWidget';
+import { UrgentWatchlistWidget } from '../components/dashboard/UrgentWatchlistWidget';
 import { RecentVehiclesTable } from '../components/dashboard/RecentVehiclesTable';
 import { RecentActivityFeed } from '../components/dashboard/RecentActivityFeed';
 import { QuickActionRibbon } from '../components/dashboard/QuickActionRibbon';
 import { useAuth } from '../context/AuthContext';
+import { useSettings } from '../context/SettingsContext';
 import api from '../api/client';
 
 export const DashboardPage = () => {
   const { user } = useAuth();
+  const { settings } = useSettings();
   const [currentDateTime, setCurrentDateTime] = useState('');
 
   useEffect(() => {
@@ -53,7 +55,7 @@ export const DashboardPage = () => {
             Welcome, {user?.fullName || 'Shenal Achintha'}
           </h2>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Here's an overview of your vehicle monitoring system.
+            {settings.companyName ? `${settings.companyName} • Fleet Monitoring Overview` : "Here's an overview of your vehicle monitoring system."}
           </p>
         </div>
         <div className="text-right">
@@ -111,7 +113,10 @@ export const DashboardPage = () => {
           <MaintenanceTrendsChart data={summary.maintenanceTrends} />
         </div>
         <div className="lg:col-span-4 h-full">
-          <FleetMapWidget vehicles={summary.liveVehicles} />
+          <UrgentWatchlistWidget
+            alerts={summary.urgentWatchlist || []}
+            expiringDocs={summary.expiringDocuments || []}
+          />
         </div>
       </div>
 

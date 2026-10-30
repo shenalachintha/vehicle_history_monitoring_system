@@ -159,7 +159,8 @@ export class VehicleController {
         const evalInfo = MaintenanceService.evaluateRuleStatus(
           rule,
           vehicle.currentOdometer,
-          new Date()
+          new Date(),
+          vehicle
         );
         return {
           ...rule,
@@ -240,41 +241,8 @@ export class VehicleController {
         },
       });
 
-      // Create standard default preventive rules for the new vehicle
-      const defaultRules = [
-        {
-          name: 'Periodic Engine Oil & Filter Service',
-          category: 'Engine Maintenance',
-          vehicleId: vehicle.id,
-          conditionType: 'DATE_OR_MILEAGE',
-          intervalMonths: 6,
-          intervalKm: 5000,
-          warningDaysBefore: 30,
-          warningKmBefore: 500,
-          lastCompletedDate: new Date(),
-          lastCompletedKm: data.currentOdometer || 0,
-          nextDueDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
-          nextDueKm: (data.currentOdometer || 0) + 5000,
-        },
-        {
-          name: 'Comprehensive Brake & Safety Inspection',
-          category: 'Brake Maintenance',
-          vehicleId: vehicle.id,
-          conditionType: 'DATE_OR_MILEAGE',
-          intervalMonths: 12,
-          intervalKm: 10000,
-          warningDaysBefore: 30,
-          warningKmBefore: 1000,
-          lastCompletedDate: new Date(),
-          lastCompletedKm: data.currentOdometer || 0,
-          nextDueDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-          nextDueKm: (data.currentOdometer || 0) + 10000,
-        },
-      ];
-
-      for (const r of defaultRules) {
-        await prisma.maintenanceRule.create({ data: r });
-      }
+      // Re-evaluate fleet alerts for the vehicle without false overdue warnings
+      AlertService.evaluateFleetAlerts(vehicle.id).catch(console.error);
 
       res.status(201).json({
         success: true,
@@ -309,6 +277,9 @@ export class VehicleController {
           details: `Updated vehicle ${vehicle.registrationNo}`,
         },
       });
+
+      // Trigger alert evaluation after vehicle details/mileage/category update
+      AlertService.evaluateFleetAlerts(vehicle.id).catch(console.error);
 
       res.json({
         success: true,

@@ -15,6 +15,7 @@ import mileageRoutes from './routes/mileage.routes.js';
 import alertRoutes from './routes/alert.routes.js';
 import documentRoutes from './routes/document.routes.js';
 import reportRoutes from './routes/report.routes.js';
+import settingsRoutes from './routes/settings.routes.js';
 
 const app = express();
 
@@ -58,6 +59,7 @@ app.use('/api/mileage', mileageRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Centralized error handler
 app.use(errorHandler);

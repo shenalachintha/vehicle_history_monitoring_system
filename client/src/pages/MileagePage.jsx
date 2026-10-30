@@ -11,6 +11,8 @@ import {
   Save,
   Search,
   AlertCircle,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import api from '../api/client';
 
@@ -22,6 +24,12 @@ export const MileagePage = () => {
   const [missingDaysThreshold, setMissingDaysThreshold] = useState(7);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [bulkPage, setBulkPage] = useState(1);
+  const [bulkPageSize, setBulkPageSize] = useState(10);
+  const [logsPage, setLogsPage] = useState(1);
+  const [logsPageSize, setLogsPageSize] = useState(15);
 
   // Fetch all active vehicles for the weekly sheet
   const { data: vehiclesRes, isLoading: vehiclesLoading } = useQuery({
@@ -44,6 +52,61 @@ export const MileagePage = () => {
   const vehicles = vehiclesRes?.data || [];
   const missingVehicles = missingRes?.data || [];
   const logs = logsRes?.data || [];
+
+  const filteredVehicles = vehicles.filter((v) => {
+    const matchesCat = !categoryFilter || v.category === categoryFilter;
+    const matchesSearch = !searchQuery ||
+      v.registrationNo?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      v.make?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      v.model?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      v.assignedDriver?.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCat && matchesSearch;
+  });
+
+  const filteredMissingVehicles = missingVehicles.filter((v) => {
+    const matchesCat = !categoryFilter || v.category === categoryFilter;
+    const matchesSearch = !searchQuery ||
+      v.registrationNo?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      v.make?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      v.model?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      v.assignedDriver?.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCat && matchesSearch;
+  });
+
+  const filteredLogs = logs.filter((log) => {
+    const vehCat = log.vehicle?.category;
+    const matchesCat = !categoryFilter || vehCat === categoryFilter;
+    const matchesSearch = !searchQuery ||
+      log.vehicle?.registrationNo?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      log.vehicle?.make?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      log.vehicle?.model?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      log.vehicle?.assignedDriver?.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCat && matchesSearch;
+  });
+
+  // Reset bulk page when category or search changes
+  React.useEffect(() => {
+    setBulkPage(1);
+  }, [categoryFilter, searchQuery, bulkPageSize]);
+
+  // Reset logs page when category or search changes
+  React.useEffect(() => {
+    setLogsPage(1);
+  }, [categoryFilter, searchQuery, logsPageSize]);
+
+  const totalBulkItems = filteredVehicles.length;
+  const totalBulkPages = Math.ceil(totalBulkItems / bulkPageSize) || 1;
+  const paginatedBulkVehicles = filteredVehicles.slice(
+    (bulkPage - 1) * bulkPageSize,
+    bulkPage * bulkPageSize
+  );
+
+  const totalLogsItems = filteredLogs.length;
+  const totalLogsPages = Math.ceil(totalLogsItems / logsPageSize) || 1;
+  const paginatedLogs = filteredLogs.slice(
+    (logsPage - 1) * logsPageSize,
+    logsPage * logsPageSize
+  );
 
   // Sheet row inputs
   const [readingsState, setReadingsState] = useState({});
@@ -184,12 +247,62 @@ export const MileagePage = () => {
 
       {/* Tab 1: Weekly Bulk Entry Sheet */}
       {activeTab === 'bulk' && (
-        <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-xs">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-slate-900 text-sm tracking-tight">Active Vehicles Entry Sheet</h3>
-            <span className="text-[11px] text-slate-400 font-medium">
-              Enter current valid odometer. Delta distance is calculated automatically.
+        <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="font-bold text-slate-900 text-sm tracking-tight">Active Vehicles Entry Sheet</h3>
+              <p className="text-[11px] text-slate-400 font-medium">
+                Enter current valid odometer. Delta distance is calculated automatically.
+              </p>
+            </div>
+            <span className="text-xs font-bold text-blue-600 bg-blue-50 border border-blue-200 px-3 py-1 rounded-xl self-start sm:self-auto">
+              Showing {filteredVehicles.length} of {vehicles.length} vehicles
             </span>
+          </div>
+
+          {/* Filter Bar: Vehicle Category & Search */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200/60">
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search by reg no, make, model or driver..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+              >
+                <option value="">All Vehicle Categories</option>
+                <option value="CAR">Cars</option>
+                <option value="VAN">Vans</option>
+                <option value="PICKUP">Pickups</option>
+                <option value="LORRY">Lorries</option>
+                <option value="BUS">Buses</option>
+                <option value="MOTORCYCLE">Motorcycles</option>
+                <option value="SPECIALIZED">Specialized Vehicles</option>
+              </select>
+            </div>
+
+            {categoryFilter || searchQuery ? (
+              <div className="flex items-center">
+                <button
+                  onClick={() => {
+                    setCategoryFilter('');
+                    setSearchQuery('');
+                  }}
+                  className="text-xs text-rose-600 hover:underline font-bold px-2 py-1"
+                >
+                  Clear Filters
+                </button>
+              </div>
+            ) : null}
           </div>
 
           <div className="overflow-x-auto">
@@ -197,6 +310,7 @@ export const MileagePage = () => {
               <thead>
                 <tr className="border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                   <th className="pb-3 pl-2">Vehicle</th>
+                  <th className="pb-3">Category</th>
                   <th className="pb-3">Driver</th>
                   <th className="pb-3">Previous Odometer</th>
                   <th className="pb-3">New Reading (km)</th>
@@ -206,25 +320,37 @@ export const MileagePage = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100/80 font-medium text-slate-700">
-                {vehicles.map((v) => {
-                  const row = readingsState[v.id] || {};
-                  const newKm = row.reading !== undefined ? Number(row.reading) : '';
-                  const prevKm = Number(v.currentOdometer);
-                  const delta = typeof newKm === 'number' && !isNaN(newKm) && newKm > 0 ? newKm - prevKm : null;
-                  const isNegative = delta !== null && delta < 0;
+                {filteredVehicles.length === 0 ? (
+                  <tr>
+                    <td colSpan="8" className="py-10 text-center text-slate-400">
+                      No vehicles found matching the selected category or search filter.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedBulkVehicles.map((v) => {
+                    const row = readingsState[v.id] || {};
+                    const newKm = row.reading !== undefined && row.reading !== '' ? Number(row.reading) : '';
+                    const prevKm = Number(v.currentOdometer);
+                    const delta = typeof newKm === 'number' && !isNaN(newKm) && newKm > 0 ? newKm - prevKm : null;
+                    const isNegative = delta !== null && delta < 0;
 
-                  return (
-                    <tr key={v.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3.5 pl-2">
-                        <span className="font-bold text-slate-900 block">{v.registrationNo}</span>
-                        <span className="text-[11px] text-slate-400">{v.make} {v.model}</span>
-                      </td>
-                      <td className="py-3.5 text-slate-600">
-                        {v.assignedDriver || 'None'}
-                      </td>
-                      <td className="py-3.5 font-bold text-slate-800">
-                        {prevKm.toLocaleString()} km
-                      </td>
+                    return (
+                      <tr key={v.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3.5 pl-2">
+                          <span className="font-bold text-slate-900 block">{v.registrationNo}</span>
+                          <span className="text-[11px] text-slate-400">{v.make} {v.model}</span>
+                        </td>
+                        <td className="py-3.5">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                            {v.category}
+                          </span>
+                        </td>
+                        <td className="py-3.5 text-slate-600">
+                          {v.assignedDriver || 'None'}
+                        </td>
+                        <td className="py-3.5 font-bold text-slate-800">
+                          {prevKm.toLocaleString()} km
+                        </td>
                       <td className="py-3.5">
                         <input
                           type="number"
@@ -289,10 +415,62 @@ export const MileagePage = () => {
                       </td>
                     </tr>
                   );
-                })}
+                }))}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Bar for Bulk Sheet */}
+          {totalBulkItems > 0 && (
+            <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-3">
+                <span className="text-slate-500">
+                  Showing{' '}
+                  <strong className="text-slate-800">
+                    {Math.min((bulkPage - 1) * bulkPageSize + 1, totalBulkItems)}
+                  </strong>{' '}
+                  to{' '}
+                  <strong className="text-slate-800">
+                    {Math.min(bulkPage * bulkPageSize, totalBulkItems)}
+                  </strong>{' '}
+                  of <strong className="text-slate-800">{totalBulkItems}</strong> vehicles
+                </span>
+                <select
+                  value={bulkPageSize}
+                  onChange={(e) => setBulkPageSize(Number(e.target.value))}
+                  className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none"
+                >
+                  <option value={10}>10 per page</option>
+                  <option value={20}>20 per page</option>
+                  <option value={50}>50 per page</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setBulkPage((p) => Math.max(1, p - 1))}
+                  disabled={bulkPage === 1}
+                  className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="Previous Page"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+
+                <span className="px-3 py-1 font-bold text-slate-700 text-xs">
+                  Page {bulkPage} of {totalBulkPages}
+                </span>
+
+                <button
+                  onClick={() => setBulkPage((p) => Math.min(totalBulkPages, p + 1))}
+                  disabled={bulkPage === totalBulkPages}
+                  className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="Next Page"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -323,7 +501,7 @@ export const MileagePage = () => {
               </select>
             </div>
           </div>
-          {missingVehicles.length === 0 ? (
+          {filteredMissingVehicles.length === 0 ? (
             <p className="text-xs text-emerald-600 font-bold py-6 text-center">
               All company vehicles have up-to-date weekly mileage recorded!
             </p>
@@ -333,6 +511,7 @@ export const MileagePage = () => {
                 <thead>
                   <tr className="border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase">
                     <th className="pb-3 pl-2">Vehicle</th>
+                    <th className="pb-3">Category</th>
                     <th className="pb-3">Make / Model</th>
                     <th className="pb-3">Responsible Driver</th>
                     <th className="pb-3">Contact</th>
@@ -341,9 +520,14 @@ export const MileagePage = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {missingVehicles.map((v) => (
+                  {filteredMissingVehicles.map((v) => (
                     <tr key={v.id} className="hover:bg-slate-50">
                       <td className="py-3.5 pl-2 font-black text-rose-600">{v.registrationNo}</td>
+                      <td className="py-3.5">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
+                          {v.category}
+                        </span>
+                      </td>
                       <td className="py-3.5 font-medium text-slate-800">{v.make} {v.model}</td>
                       <td className="py-3.5 font-bold text-slate-800">{v.assignedDriver || 'None'}</td>
                       <td className="py-3.5 text-slate-600">{v.driverContact || '-'}</td>
@@ -378,7 +562,7 @@ export const MileagePage = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {logs.map((log) => (
+                {paginatedLogs.map((log) => (
                   <tr key={log.id} className="hover:bg-slate-50">
                     <td className="py-3.5 pl-2 font-bold text-blue-600">{log.vehicle?.registrationNo}</td>
                     <td className="py-3.5 text-slate-700 font-medium">{new Date(log.recordedDate).toLocaleDateString()}</td>
@@ -400,6 +584,58 @@ export const MileagePage = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Bar for Historical Logs */}
+          {totalLogsItems > 0 && (
+            <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-3">
+                <span className="text-slate-500">
+                  Showing{' '}
+                  <strong className="text-slate-800">
+                    {Math.min((logsPage - 1) * logsPageSize + 1, totalLogsItems)}
+                  </strong>{' '}
+                  to{' '}
+                  <strong className="text-slate-800">
+                    {Math.min(logsPage * logsPageSize, totalLogsItems)}
+                  </strong>{' '}
+                  of <strong className="text-slate-800">{totalLogsItems}</strong> records
+                </span>
+                <select
+                  value={logsPageSize}
+                  onChange={(e) => setLogsPageSize(Number(e.target.value))}
+                  className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none"
+                >
+                  <option value={15}>15 per page</option>
+                  <option value={30}>30 per page</option>
+                  <option value={50}>50 per page</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setLogsPage((p) => Math.max(1, p - 1))}
+                  disabled={logsPage === 1}
+                  className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="Previous Page"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+
+                <span className="px-3 py-1 font-bold text-slate-700 text-xs">
+                  Page {logsPage} of {totalLogsPages}
+                </span>
+
+                <button
+                  onClick={() => setLogsPage((p) => Math.min(totalLogsPages, p + 1))}
+                  disabled={logsPage === totalLogsPages}
+                  className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="Next Page"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

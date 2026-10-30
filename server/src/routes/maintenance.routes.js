@@ -19,7 +19,11 @@ router.put(
   authorize(['ADMIN', 'FLEET_MANAGER', 'MAINTENANCE_OFFICER']),
   MaintenanceController.update
 );
-router.delete('/:id', authorize(['ADMIN', 'FLEET_MANAGER']), MaintenanceController.delete);
+router.delete(
+  '/:id',
+  authorize(['ADMIN', 'FLEET_MANAGER', 'MAINTENANCE_OFFICER']),
+  MaintenanceController.delete
+);
 
 export default router;
 

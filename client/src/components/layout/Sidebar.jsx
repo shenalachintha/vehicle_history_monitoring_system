@@ -14,6 +14,7 @@ import {
   Bell,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useSettings } from '../../context/SettingsContext';
 
 const navigationItems = [
   { name: 'Dashboard', path: '/', icon: LayoutDashboard },
@@ -30,20 +31,21 @@ const navigationItems = [
 
 export const Sidebar = () => {
   const { hasRole } = useAuth();
+  const { settings } = useSettings();
 
   return (
     <aside className="w-64 bg-[#0B132B] text-slate-300 flex flex-col justify-between h-screen fixed left-0 top-0 z-30 shadow-xl select-none">
       <div>
         {/* Brand / Logo */}
-        <div className="flex items-center gap-3.5 px-6 py-6 border-b border-slate-800/60">
-          <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/30">
-            <Car className="w-6 h-6 stroke-[2.2]" />
+        <div className="flex items-center gap-3 px-4 py-3.5 border-b border-slate-800/60 bg-slate-900/50">
+          <div className="w-12 h-12 rounded-xl bg-white p-1 flex items-center justify-center shadow-md shadow-black/30 shrink-0 overflow-hidden border border-slate-200/20">
+            <img src="/logo.jpg" alt="El-Toro Logo" className="w-full h-full object-contain" />
           </div>
-          <div>
-            <h1 className="font-bold text-white text-[15px] leading-tight tracking-tight">
-              Vehicle History
+          <div className="min-w-0">
+            <h1 className="font-extrabold text-white text-[12px] leading-tight tracking-tight truncate max-w-[155px]" title={settings.companyName || 'El-Toro Roofing Products Ltd.'}>
+              {settings.companyName || 'El-Toro Roofing Products Ltd.'}
             </h1>
-            <p className="text-[12px] text-slate-400 font-medium">Monitoring System</p>
+            <p className="text-[10px] text-emerald-400 font-semibold tracking-wide truncate mt-0.5">Fleet Monitoring System</p>
           </div>
         </div>
 

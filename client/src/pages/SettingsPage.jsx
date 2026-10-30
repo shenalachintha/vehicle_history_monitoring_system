@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Settings,
   Building,
@@ -12,43 +12,32 @@ import {
   Radio,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-
-const defaultSettings = {
-  companyName: 'Lanka Fleet Logistics (Pvt) Ltd',
-  timezone: 'Asia/Colombo (GMT+05:30)',
-  currency: 'USD',
-  distanceUnit: 'km',
-  warningDays: 30,
-  warningKm: 500,
-  criticalDays: 15,
-  criticalKm: 200,
-  anomalyDistanceLimit: 3000,
-  weeklyAuditDay: 'Monday',
-  emailNotifications: true,
-};
-
-const loadSettings = () => {
-  const storedSettings = localStorage.getItem('fleetguard_settings');
-  if (!storedSettings) return defaultSettings;
-
-  try {
-    return { ...defaultSettings, ...JSON.parse(storedSettings) };
-  } catch {
-    return defaultSettings;
-  }
-};
+import { useSettings } from '../context/SettingsContext';
 
 export const SettingsPage = () => {
   const { user } = useAuth();
+  const { settings, updateSettings } = useSettings();
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const [settings, setSettings] = useState(loadSettings);
+  const [formSettings, setFormSettings] = useState(settings);
 
-  const handleSave = (e) => {
+  useEffect(() => {
+    setFormSettings(settings);
+  }, [settings]);
+
+  const handleSave = async (e) => {
     e.preventDefault();
-    localStorage.setItem('fleetguard_settings', JSON.stringify(settings));
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3500);
+    setIsSaving(true);
+    try {
+      await updateSettings(formSettings);
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 4000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -80,13 +69,24 @@ export const SettingsPage = () => {
             </div>
           </div>
 
+          {/* Company Logo Preview */}
+          <div className="flex items-center gap-4 p-3 bg-slate-50 border border-slate-200/60 rounded-2xl">
+            <div className="w-14 h-14 rounded-xl bg-white p-1 border border-slate-200 shadow-xs flex items-center justify-center shrink-0 overflow-hidden">
+              <img src="/logo.jpg" alt="Company Logo" className="w-full h-full object-contain" />
+            </div>
+            <div>
+              <span className="text-xs font-bold text-slate-800 block">Official Company Brand Logo</span>
+              <span className="text-[11px] text-slate-500 block mt-0.5">Active on login screen, sidebar, top navbar header, and audit reports.</span>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div>
               <label className="font-bold text-slate-700 block mb-1">Company / Organization Name</label>
               <input
                 type="text"
-                value={settings.companyName}
-                onChange={(e) => setSettings({ ...settings, companyName: e.target.value })}
+                value={formSettings.companyName || ''}
+                onChange={(e) => setFormSettings({ ...formSettings, companyName: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
               />
             </div>
@@ -94,8 +94,8 @@ export const SettingsPage = () => {
             <div>
               <label className="font-bold text-slate-700 block mb-1">Operational Timezone</label>
               <select
-                value={settings.timezone}
-                onChange={(e) => setSettings({ ...settings, timezone: e.target.value })}
+                value={formSettings.timezone || ''}
+                onChange={(e) => setFormSettings({ ...formSettings, timezone: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
               >
                 <option value="Asia/Colombo (GMT+05:30)">Asia/Colombo (GMT+05:30)</option>
@@ -109,12 +109,12 @@ export const SettingsPage = () => {
             <div>
               <label className="font-bold text-slate-700 block mb-1">Display Currency</label>
               <select
-                value={settings.currency}
-                onChange={(e) => setSettings({ ...settings, currency: e.target.value })}
+                value={formSettings.currency || 'LKR'}
+                onChange={(e) => setFormSettings({ ...formSettings, currency: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
               >
-                <option value="USD">USD ($) - US Dollar</option>
                 <option value="LKR">LKR (Rs) - Sri Lankan Rupee</option>
+                <option value="USD">USD ($) - US Dollar</option>
                 <option value="EUR">EUR (€) - Euro</option>
                 <option value="GBP">GBP (£) - British Pound</option>
               </select>
@@ -123,8 +123,8 @@ export const SettingsPage = () => {
             <div>
               <label className="font-bold text-slate-700 block mb-1">Distance Metric</label>
               <select
-                value={settings.distanceUnit}
-                onChange={(e) => setSettings({ ...settings, distanceUnit: e.target.value })}
+                value={formSettings.distanceUnit || 'km'}
+                onChange={(e) => setFormSettings({ ...formSettings, distanceUnit: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
               >
                 <option value="km">Kilometres (km) - Confirmed Fleet Standard</option>
@@ -152,23 +152,11 @@ export const SettingsPage = () => {
               <input
                 type="number"
                 min="1"
-                value={settings.warningDays}
-                onChange={(e) => setSettings({ ...settings, warningDays: Number(e.target.value) })}
+                value={formSettings.warningDays ?? 30}
+                onChange={(e) => setFormSettings({ ...formSettings, warningDays: Number(e.target.value) })}
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl"
               />
               <span className="text-[10.5px] text-slate-400">Triggers 'UPCOMING' state</span>
-            </div>
-
-            <div>
-              <label className="font-bold text-slate-700 block mb-1">Document Renewal Warning (Days)</label>
-              <input
-                type="number"
-                min="0"
-                value={settings.documentWarningDays}
-                onChange={(e) => setSettings({ ...settings, documentWarningDays: Number(e.target.value) })}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-              />
-              <span className="text-[10.5px] text-slate-400">Used by document filters and expiry badges</span>
             </div>
 
             <div>
@@ -176,8 +164,8 @@ export const SettingsPage = () => {
               <input
                 type="number"
                 min="50"
-                value={settings.warningKm}
-                onChange={(e) => setSettings({ ...settings, warningKm: Number(e.target.value) })}
+                value={formSettings.warningKm ?? 500}
+                onChange={(e) => setFormSettings({ ...formSettings, warningKm: Number(e.target.value) })}
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl"
               />
               <span className="text-[10.5px] text-slate-400">Triggers 'UPCOMING' distance</span>
@@ -188,8 +176,8 @@ export const SettingsPage = () => {
               <input
                 type="number"
                 min="1"
-                value={settings.criticalDays}
-                onChange={(e) => setSettings({ ...settings, criticalDays: Number(e.target.value) })}
+                value={formSettings.criticalDays ?? 15}
+                onChange={(e) => setFormSettings({ ...formSettings, criticalDays: Number(e.target.value) })}
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl"
               />
               <span className="text-[10.5px] text-slate-400">Escalates to 'CRITICAL'</span>
@@ -200,8 +188,8 @@ export const SettingsPage = () => {
               <input
                 type="number"
                 min="500"
-                value={settings.anomalyDistanceLimit}
-                onChange={(e) => setSettings({ ...settings, anomalyDistanceLimit: Number(e.target.value) })}
+                value={formSettings.anomalyDistanceLimit ?? 3000}
+                onChange={(e) => setFormSettings({ ...formSettings, anomalyDistanceLimit: Number(e.target.value) })}
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl"
               />
               <span className="text-[10.5px] text-slate-400">Flags excessive weekly travel</span>
@@ -252,10 +240,11 @@ export const SettingsPage = () => {
         <div className="flex justify-end">
           <button
             type="submit"
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl text-xs font-bold shadow-md shadow-blue-600/25 transition-all"
+            disabled={isSaving}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl text-xs font-bold shadow-md shadow-blue-600/25 transition-all disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
-            Save Preferences
+            {isSaving ? 'Applying Changes...' : 'Save Preferences'}
           </button>
         </div>
       </form>

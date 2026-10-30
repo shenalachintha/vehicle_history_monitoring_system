@@ -32,12 +32,29 @@ export class MaintenanceService {
    * Evaluate rule status against current vehicle odometer and current date
    * Returns: { status: 'OK' | 'UPCOMING' | 'DUE' | 'OVERDUE' | 'CRITICAL', reason: string, isDue: boolean, isOverdue: boolean }
    */
-  static evaluateRuleStatus(rule, currentKm, currentDate = new Date()) {
+  static evaluateRuleStatus(rule, currentKm, currentDate = new Date(), vehicleContext = null) {
     const currentKmNum = Number(currentKm) || 0;
     const now = new Date(currentDate);
 
-    const nextDueDate = rule.nextDueDate ? new Date(rule.nextDueDate) : null;
-    const nextDueKm = rule.nextDueKm ? Number(rule.nextDueKm) : null;
+    let nextDueDate = rule.nextDueDate ? new Date(rule.nextDueDate) : null;
+    let nextDueKm = rule.nextDueKm ? Number(rule.nextDueKm) : null;
+
+    // If this is a fleet-wide/category rule (vehicleId=null) OR a newly registered vehicle
+    // with no prior service records, dynamically calculate target due based on vehicle's baseline
+    if (!rule.vehicleId || (vehicleContext && !rule.lastCompletedDate && !rule.lastCompletedKm)) {
+      const baseKm = (rule.lastCompletedKm !== null && rule.lastCompletedKm !== undefined)
+        ? Number(rule.lastCompletedKm)
+        : currentKmNum;
+      const baseDate = rule.lastCompletedDate ? new Date(rule.lastCompletedDate) : now;
+
+      if (rule.intervalKm && Number(rule.intervalKm) > 0) {
+        nextDueKm = baseKm + Number(rule.intervalKm);
+      }
+      if (rule.intervalMonths && Number(rule.intervalMonths) > 0) {
+        nextDueDate = new Date(baseDate);
+        nextDueDate.setMonth(nextDueDate.getMonth() + Number(rule.intervalMonths));
+      }
+    }
 
     const warningDays = Number(rule.warningDaysBefore) || 30;
     const warningKm = Number(rule.warningKmBefore) || 500;

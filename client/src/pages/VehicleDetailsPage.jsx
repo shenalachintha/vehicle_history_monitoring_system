@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -19,20 +19,59 @@ import {
   Shield,
   Layers,
   Sparkles,
+  Trash2,
+  ChevronDown,
+  RefreshCw,
 } from 'lucide-react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { useSettings } from '../context/SettingsContext';
 
 export const VehicleDetailsPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { hasRole } = useAuth();
+  const { formatCurrency } = useSettings();
   const [activeTab, setActiveTab] = useState('overview');
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
+  const statusDropdownRef = useRef(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(e.target)) {
+        setStatusDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const { data: response, isLoading } = useQuery({
     queryKey: ['vehicle', id],
     queryFn: () => api.get(`/vehicles/${id}`),
+  });
+
+  const deleteRuleMutation = useMutation({
+    mutationFn: (ruleId) => api.delete(`/maintenance/${ruleId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['vehicle', id]);
+      queryClient.invalidateQueries(['alerts']);
+      queryClient.invalidateQueries(['dashboard-summary']);
+      queryClient.invalidateQueries(['maintenance-rules']);
+    },
+  });
+
+  // Status change mutation
+  const statusMutation = useMutation({
+    mutationFn: (newStatus) => api.put(`/vehicles/${id}`, { status: newStatus }),
+    onSuccess: () => {
+      setStatusDropdownOpen(false);
+      queryClient.invalidateQueries(['vehicle', id]);
+      queryClient.invalidateQueries(['vehicles']);
+      queryClient.invalidateQueries(['dashboard-summary']);
+    },
   });
 
   const vehicle = response?.data;
@@ -112,17 +151,56 @@ export const VehicleDetailsPage = () => {
               <h1 className="text-2xl font-black text-slate-900 tracking-tight">
                 {vehicle.registrationNo}
               </h1>
-              <span
-                className={`px-3 py-1 rounded-full text-xs font-bold border ${
-                  vehicle.status === 'ACTIVE'
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : vehicle.status === 'UNDER_MAINTENANCE'
-                    ? 'bg-amber-50 text-amber-700 border-amber-200'
-                    : 'bg-rose-50 text-rose-700 border-rose-200'
-                }`}
-              >
-                {vehicle.status.replace('_', ' ')}
-              </span>
+
+              {/* Clickable Status Badge Dropdown */}
+              <div className="relative" ref={statusDropdownRef}>
+                <button
+                  onClick={() => setStatusDropdownOpen((o) => !o)}
+                  disabled={statusMutation.isPending}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-all hover:opacity-80 ${
+                    vehicle.status === 'ACTIVE'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : vehicle.status === 'UNDER_MAINTENANCE'
+                      ? 'bg-amber-50 text-amber-700 border-amber-200'
+                      : vehicle.status === 'OUT_OF_SERVICE'
+                      ? 'bg-rose-50 text-rose-700 border-rose-200'
+                      : 'bg-slate-100 text-slate-600 border-slate-200'
+                  }`}
+                >
+                  {statusMutation.isPending ? (
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                  ) : null}
+                  {vehicle.status.replace(/_/g, ' ')}
+                  <ChevronDown className="w-3 h-3 opacity-60" />
+                </button>
+
+                {statusDropdownOpen && (
+                  <div className="absolute left-0 top-full mt-1.5 z-50 bg-white rounded-2xl border border-slate-200 shadow-xl py-1.5 min-w-[190px]">
+                    <p className="px-3 pt-1 pb-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Change Vehicle Status
+                    </p>
+                    {[
+                      { value: 'ACTIVE', label: 'Active', color: 'text-emerald-700', dot: 'bg-emerald-500' },
+                      { value: 'UNDER_MAINTENANCE', label: 'Under Maintenance', color: 'text-amber-700', dot: 'bg-amber-500' },
+                      { value: 'OUT_OF_SERVICE', label: 'Out of Service', color: 'text-rose-700', dot: 'bg-rose-500' },
+                      { value: 'DECOMMISSIONED', label: 'Decommissioned', color: 'text-slate-500', dot: 'bg-slate-400' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        disabled={vehicle.status === opt.value || statusMutation.isPending}
+                        onClick={() => statusMutation.mutate(opt.value)}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold transition-colors hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed ${opt.color}`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${opt.dot} shrink-0`} />
+                        {opt.label}
+                        {vehicle.status === opt.value && (
+                          <CheckCircle2 className="w-3.5 h-3.5 ml-auto opacity-70" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
             <p className="text-xs font-semibold text-slate-500 mt-1">
               {vehicle.make} {vehicle.model} • {vehicle.year} • {vehicle.category} • {vehicle.fuelType}
@@ -147,7 +225,7 @@ export const VehicleDetailsPage = () => {
           <div>
             <span className="text-slate-400 font-semibold block text-[11px]">Total Expenses</span>
             <span className="text-base font-extrabold text-blue-600">
-              ${Number(vehicle.totalExpenditure || 0).toLocaleString()}
+              {formatCurrency(vehicle.totalExpenditure)}
             </span>
           </div>
         </div>
@@ -183,12 +261,27 @@ export const VehicleDetailsPage = () => {
                 </div>
                 <div className="space-y-2">
                   {vehicle.alerts.map((al) => (
-                    <div key={al.id} className="bg-white p-3 rounded-xl border border-amber-100 flex items-start justify-between text-xs">
+                    <div key={al.id} className="bg-white p-3.5 rounded-xl border border-amber-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                       <div>
                         <p className="font-bold text-slate-900">{al.title}</p>
                         <p className="text-slate-500 mt-0.5">{al.message}</p>
+                        {al.alertType?.includes('DOCUMENT') ? (
+                          <button
+                            onClick={() => navigate(`/documents?search=${encodeURIComponent(vehicle.registrationNo)}`)}
+                            className="text-[11px] font-bold text-blue-600 hover:underline mt-1.5 inline-block"
+                          >
+                            📄 Renew Document to Clear Warning →
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => navigate(`/service-history?action=add&vehicleId=${vehicle.id}&ruleId=${al.ruleId || ''}&title=${encodeURIComponent(al.title)}`)}
+                            className="text-[11px] font-bold text-blue-600 hover:underline mt-1.5 inline-block"
+                          >
+                            🛠️ Record Service to Clear Warning →
+                          </button>
+                        )}
                       </div>
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800">
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800 self-start sm:self-center shrink-0">
                         {al.severity}
                       </span>
                     </div>
@@ -296,7 +389,7 @@ export const VehicleDetailsPage = () => {
             </div>
             <div>
               <span className="text-slate-400 font-medium block">Purchase Price</span>
-              <span className="font-bold text-slate-800">{vehicle.purchasePrice ? `$${Number(vehicle.purchasePrice).toLocaleString()}` : 'N/A'}</span>
+              <span className="font-bold text-slate-800">{vehicle.purchasePrice ? formatCurrency(vehicle.purchasePrice) : 'N/A'}</span>
             </div>
             <div>
               <span className="text-slate-400 font-medium block">Supplier / Dealer</span>
@@ -347,7 +440,7 @@ export const VehicleDetailsPage = () => {
                         {ev.items.map((item) => (
                           <div key={item.id} className="flex justify-between text-slate-600">
                             <span>{item.description} ({item.brand || 'Generic'}) x {Number(item.quantity)}</span>
-                            <span className="font-semibold text-slate-800">${Number(item.totalPrice).toFixed(2)}</span>
+                            <span className="font-semibold text-slate-800">{formatCurrency(item.totalPrice)}</span>
                           </div>
                         ))}
                       </div>
@@ -356,7 +449,7 @@ export const VehicleDetailsPage = () => {
 
                   <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-200/60 text-slate-500">
                     <span>Provider: <strong className="text-slate-700">{ev.serviceProvider}</strong> ({ev.technicianName || 'N/A'})</span>
-                    <span className="font-black text-slate-900 text-sm">Total: ${Number(ev.totalCost).toFixed(2)}</span>
+                    <span className="font-black text-slate-900 text-sm">Total: {formatCurrency(ev.totalCost)}</span>
                   </div>
                 </div>
               ))
@@ -396,6 +489,7 @@ export const VehicleDetailsPage = () => {
                     <th className="pb-3">Last Serviced</th>
                     <th className="pb-3">Next Due</th>
                     <th className="pb-3">Status</th>
+                    <th className="pb-3 text-right pr-2">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -440,6 +534,21 @@ export const VehicleDetailsPage = () => {
                           <span className={`px-2.5 py-1 rounded-full text-[10.5px] font-bold border ${statusColors[status] || statusColors.OK}`}>
                             {status}
                           </span>
+                        </td>
+                        <td className="py-3 text-right pr-2">
+                          {hasRole(['ADMIN', 'FLEET_MANAGER', 'MAINTENANCE_OFFICER']) && (
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`Delete rule "${r.name}"? All active alerts associated with this rule will be permanently deleted.`)) {
+                                  deleteRuleMutation.mutate(r.id);
+                                }
+                              }}
+                              className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors"
+                              title="Delete maintenance rule"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -502,25 +611,77 @@ export const VehicleDetailsPage = () => {
       {activeTab === 'documents' && (
         <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-xs">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-slate-900 text-sm tracking-tight">Compliance & Registered Documents</h3>
+            <div>
+              <h3 className="font-bold text-slate-900 text-sm tracking-tight">Compliance & Registered Documents</h3>
+              <p className="text-[11px] text-slate-400 mt-0.5">Insurance, revenue licences, fitness certificates, and emission reports.</p>
+            </div>
+            <button
+              onClick={() => navigate(`/documents?action=upload&vehicleId=${vehicle.id}`)}
+              className="text-xs font-bold text-blue-600 hover:underline"
+            >
+              + Register New Document
+            </button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {vehicle.documents?.map((doc) => (
-              <div key={doc.id} className="p-4 rounded-xl border border-slate-100 bg-slate-50 flex items-start justify-between text-xs">
-                <div>
-                  <span className="font-bold text-slate-900 text-sm block">{doc.title}</span>
-                  <span className="text-[11px] font-semibold text-blue-600">{doc.docType.replace(/_/g, ' ')}</span>
-                  <p className="text-slate-500 mt-1">Number: {doc.documentNumber || 'N/A'}</p>
-                  <p className="text-slate-500">
-                    Expiry: {doc.expiryDate ? new Date(doc.expiryDate).toLocaleDateString() : 'Permanent'}
-                  </p>
-                </div>
-                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700">
-                  Registered
-                </span>
-              </div>
-            ))}
-          </div>
+          {(!vehicle.documents || vehicle.documents.length === 0) ? (
+            <div className="text-center py-10 text-slate-400 text-xs">
+              No documents registered for this vehicle yet.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {vehicle.documents?.map((doc) => {
+                const now = new Date();
+                const expiry = doc.expiryDate ? new Date(doc.expiryDate) : null;
+                const diffDays = expiry
+                  ? Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+                  : null;
+                const isExpired = diffDays !== null && diffDays < 0;
+                const warningDaysBefore = Number.isFinite(Number(doc.warningDaysBefore))
+                  ? Number(doc.warningDaysBefore)
+                  : 30;
+                const isExpiringSoon = diffDays !== null && diffDays >= 0 && diffDays <= warningDaysBefore;
+
+                return (
+                  <div key={doc.id} className="p-4 rounded-xl border border-slate-100 bg-slate-50 flex items-start justify-between text-xs gap-3">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block">
+                        {doc.docType.replace(/_/g, ' ')}
+                      </span>
+                      <span className="font-bold text-slate-900 text-sm block">{doc.title}</span>
+                      <p className="text-slate-500">Number: <strong className="text-slate-700">{doc.documentNumber || 'N/A'}</strong></p>
+                      <p className="text-slate-500">
+                        Expiry: <strong className="text-slate-700">{expiry ? expiry.toLocaleDateString() : 'Permanent / N/A'}</strong>
+                      </p>
+                      <button
+                        onClick={() => navigate(`/documents?search=${encodeURIComponent(doc.documentNumber || doc.title)}`)}
+                        className="text-[11px] font-bold text-blue-600 hover:underline pt-1 block"
+                      >
+                        Update / Renew Expiry →
+                      </button>
+                    </div>
+                    <span
+                      className={`px-2.5 py-1 rounded-full text-[10.5px] font-bold shrink-0 border ${
+                        isExpired
+                          ? 'bg-rose-50 text-rose-700 border-rose-200'
+                          : isExpiringSoon
+                          ? 'bg-amber-50 text-amber-700 border-amber-200'
+                          : expiry
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-slate-100 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      {isExpired
+                        ? `Expired (${Math.abs(diffDays)}d ago)`
+                        : isExpiringSoon
+                        ? `${diffDays}d left`
+                        : expiry
+                        ? 'Valid / Active'
+                        : 'Permanent'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -531,7 +692,7 @@ export const VehicleDetailsPage = () => {
           <div className="p-4 bg-slate-50 rounded-xl text-xs space-y-2">
             <div className="flex justify-between font-bold text-slate-800 text-sm">
               <span>Lifetime Maintenance Cost</span>
-              <span className="text-blue-600">${Number(vehicle.totalExpenditure || 0).toFixed(2)}</span>
+              <span className="text-blue-600">{formatCurrency(vehicle.totalExpenditure)}</span>
             </div>
             <p className="text-slate-400 text-[11px]">
               Calculated across all routine services, inspections, breakdown repairs, and parts replacements.

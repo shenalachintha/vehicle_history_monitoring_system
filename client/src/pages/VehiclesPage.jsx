@@ -13,6 +13,8 @@ import {
   Building2,
   X,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -26,6 +28,8 @@ export const VehiclesPage = () => {
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [statusFilter, setStatusFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(9);
   const [showAddModal, setShowAddModal] = useState(false);
 
   // Form state
@@ -89,6 +93,18 @@ export const VehiclesPage = () => {
   });
 
   const vehicles = response?.data || [];
+
+  // Reset to first page when any filter changes
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, categoryFilter, pageSize]);
+
+  const totalItems = vehicles.length;
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
+  const paginatedVehicles = vehicles.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
 
   const handleRegisterSubmit = (e) => {
     e.preventDefault();
@@ -178,7 +194,7 @@ export const VehiclesPage = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {vehicles.map((v) => (
+          {paginatedVehicles.map((v) => (
             <div
               key={v.id}
               onClick={() => navigate(`/vehicles/${v.id}`)}
@@ -240,6 +256,59 @@ export const VehiclesPage = () => {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Pagination Bar */}
+      {totalItems > 0 && (
+        <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-3">
+            <span className="text-slate-500">
+              Showing{' '}
+              <strong className="text-slate-800">
+                {Math.min((currentPage - 1) * pageSize + 1, totalItems)}
+              </strong>{' '}
+              to{' '}
+              <strong className="text-slate-800">
+                {Math.min(currentPage * pageSize, totalItems)}
+              </strong>{' '}
+              of <strong className="text-slate-800">{totalItems}</strong> vehicles
+            </span>
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none"
+            >
+              <option value={6}>6 per page</option>
+              <option value={9}>9 per page</option>
+              <option value={15}>15 per page</option>
+              <option value={30}>30 per page</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Previous Page"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+
+            <span className="px-3 py-1 font-bold text-slate-700 text-xs">
+              Page {currentPage} of {totalPages}
+            </span>
+
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Next Page"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
 
