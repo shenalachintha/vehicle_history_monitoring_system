@@ -128,16 +128,13 @@ npm run dev:client
 
 ---
 
-## 5. Pre-Configured Demo Accounts
+## 5. Pre-Configured Demo Account
 
 | Role | Email | Password | Full Name |
 |---|---|---|---|
-| **System Administrator** | `admin@fleetguard.com` | `admin123` | Shenal Achintha |
-| **Fleet Manager** | `manager@fleetguard.com` | `password123` | Kavindu Silva |
-| **Maintenance Officer** | `officer@fleetguard.com` | `password123` | Tharindu Jayasinghe |
-| **Mileage Recorder** | `recorder@fleetguard.com` | `password123` | Saman Kumara |
+| **System Administrator** | `admin@eltoro.lk` | `admin123` | El-Toro Administrator |
 
-*Note: Quick one-click login buttons for all 4 roles are available directly on the login page.*
+This account is created by the seed command. Run the seed command against the target database before trying these credentials.
 
 ---
 
