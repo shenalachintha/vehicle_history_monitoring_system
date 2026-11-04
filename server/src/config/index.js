@@ -8,6 +8,9 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || 'fleetguard_super_secure_jwt_secret_key_2025_prod_ready',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   clientUrl: process.env.CLIENT_URL || 'http://localhost:3000',
+  clientUrls: (process.env.CLIENT_URL || 'http://localhost:3000')
+    .split(',')
+    .map((url) => url.trim().replace(/\/$/, ''))
+    .filter(Boolean),
   uploadDir: process.env.UPLOAD_DIR || 'uploads',
 };
-
